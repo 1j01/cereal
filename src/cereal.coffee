@@ -1,12 +1,25 @@
 
 isPrimitive = (obj)-> obj isnt Object obj
 
+randomString = (length)-> Math.round((Math.pow(36, length + 1) - Math.random() * Math.pow(36, length))).toString(36).slice(1)
+
 undef  = 0
 nu     = 1
 prim   = 2
 object = 3
 array  = 4
 ref    = 5
+unserialisable = 9
+
+unserialisableReferences = {}
+
+
+class Unserialisable
+	clientID = randomString 30
+	counter = 0
+	@getID = -> "#{clientID}-#{++counter}"
+	constructor: (@id)->
+	toString: -> "(unserialisable ##{@id})"
 
 generateEncodeWork = (obj, target)->
 	names = Object.keys(obj)
@@ -28,6 +41,14 @@ jsonify = (obj)->
 			target[0] = undef
 		else if obj is null
 			target[0] = nu
+		else if typeof obj is 'function'
+			id = Unserialisable.getID()
+			unserialisableReferences[id] = obj
+			target[0] = unserialisable
+			target[1] = id
+		else if obj instanceof Unserialisable
+			target[0] = unserialisable
+			target[1] = obj.id
 		else if isPrimitive obj
 			target[0] = prim
 			target[1] = obj
@@ -91,6 +112,13 @@ dejsonify = (obj)->
 				target[field] = seen[item[3]]
 				if target[field] is undefined
 					throw new Error "Decoding error: referenced object not found"
+			when unserialisable
+				target[field] = unserialisableReferences[item[3]]
+				# if target[field] is undefined
+				# 	throw new Error "Decoding error: referenced unserialisable object (function) not found"
+				# console.log "got unserialisable", item
+				target[field] ?= new Unserialisable item[3]
+				# console.log "unserialisable", target[field], target[field] instanceof Unserialisable
 			else
 				throw new Error "Decoding error: unhandled object type code #{item[2]}"
 	
@@ -99,5 +127,6 @@ dejsonify = (obj)->
 @Cereal =
 	stringify: (obj)-> JSON.stringify jsonify obj
 	parse: (str)-> dejsonify JSON.parse str
+	UnserialisableFunction: Unserialisable
 
-module?.exports = Cereal
+module?.exports = @Cereal
